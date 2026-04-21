@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environments
+.env
+.venv/
+env/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data and models (large files, not tracked)
+data/raw/
+data/processed/
+data/synthetic/
+models/*.pkl
+models/*.pt
+models/*.joblib
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Reports (regenerated, not tracked)
+reports/figures/*.png
+reports/figures/*.pdf

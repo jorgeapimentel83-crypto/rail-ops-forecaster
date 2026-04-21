@@ -1,0 +1,21 @@
+name: rail-ops
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - scikit-learn
+  - lightgbm
+  - shap
+  - matplotlib
+  - seaborn
+  - jupyter
+  - ipykernel
+  - pytest
+  - pip
+  - pip:
+    - streamlit
+    - torch
+    - plotly
