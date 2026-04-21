@@ -19,7 +19,8 @@ venv/
 # Data and models (large files, not tracked)
 data/raw/
 data/processed/
-data/synthetic/
+data/synthetic/*
+!data/synthetic/phase1_terminal_dwell.csv
 models/*.pkl
 models/*.pt
 models/*.joblib
