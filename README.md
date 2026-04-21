@@ -7,6 +7,34 @@ operating dynamics for demonstration and modeling purposes.
 
 ---
 
+## Key Results
+
+- **Tuned LightGBM** achieves RMSE **3.749h** for next-day terminal dwell — a 28.6% improvement over naive persistence (RMSE 5.250h) using upstream operational drivers
+- **LSTM temporal model** did not outperform the tabular benchmark (RMSE 7.5h vs 3.749h) — a documented negative result that informed the modeling strategy
+- **Phase 3** translated regression forecasts into tiered operational risk signals (Normal / Elevated / High Risk / Breach Warning) and resource pressure flags
+- **Phase 4** extended the framework to direct multi-step horizons (day+1 through day+7); RMSE remained flat (~3.73–3.75h) across horizons, with low breach recall motivating Phase 5
+- **Phase 5** dedicated breach classifier achieved **79.8% recall at threshold 0.40** — roughly 10–12× improvement over the regression-derived warning flag (7.0% recall)
+- The final system is a **layered decision-support framework**: regression for planning, risk tiers for situational awareness, and a classifier for breach early-warning
+
+---
+
+## Getting Started
+
+```bash
+git clone <repo-url>
+cd rail-ops-forecaster
+conda env create -f environment.yml
+conda activate rail-ops
+```
+
+The main synthetic dataset is included at `data/synthetic/phase1_terminal_dwell.csv`
+(8 terminals, 2022-01-01 through 2024-12-31, 8,760 rows). No additional data download is required.
+
+Open notebooks in order from `01_data_exploration.ipynb` through `10_breach_detection_model.ipynb`.
+Each notebook is self-contained with narrative framing alongside the analysis.
+
+---
+
 ## Business Problem
 
 A Class I railroad's **operating ratio** (operating expenses ÷ operating revenue) is
@@ -464,7 +492,7 @@ briefing or weekly planning session:
 
 ## Technology Stack
 
-### Phase 1 (active)
+### Core Stack (Phases 1–5)
 
 | Layer | Tool | Purpose |
 |---|---|---|
@@ -537,10 +565,11 @@ rail-ops-forecaster/
 │       ├── scenario_view.py
 │       └── alert_view.py
 │
-├── data/                       # Data directory (gitignored)
-│   ├── raw/
-│   ├── processed/
-│   └── synthetic/
+├── data/
+│   ├── synthetic/
+│   │   └── phase1_terminal_dwell.csv   # Main dataset — tracked in repo
+│   ├── raw/                            # gitignored
+│   └── processed/                      # gitignored
 │
 ├── models/                     # Saved model artifacts (gitignored)
 │
