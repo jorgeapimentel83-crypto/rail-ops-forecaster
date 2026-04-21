@@ -9,12 +9,13 @@ operating dynamics for demonstration and modeling purposes.
 
 ## Key Results
 
-- **Tuned LightGBM** achieves RMSE **3.749h** for next-day terminal dwell — a 28.6% improvement over naive persistence (RMSE 5.250h) using upstream operational drivers
+- **Tuned LightGBM** reduced RMSE from **5.250h** (naive persistence) to **3.749h** — a **28.6% improvement** over naive persistence — using upstream operational drivers
 - **LSTM temporal model** did not outperform the tabular benchmark (RMSE 7.5h vs 3.749h) — a documented negative result that informed the modeling strategy
 - **Phase 3** translated regression forecasts into tiered operational risk signals (Normal / Elevated / High Risk / Breach Warning) and resource pressure flags
 - **Phase 4** extended the framework to direct multi-step horizons (day+1 through day+7); RMSE remained flat (~3.73–3.75h) across horizons, with low breach recall motivating Phase 5
 - **Phase 5** dedicated breach classifier achieved **79.8% recall at threshold 0.40** — roughly 10–12× improvement over the regression-derived warning flag (7.0% recall)
-- The final system is a **layered decision-support framework**: regression for planning, risk tiers for situational awareness, and a classifier for breach early-warning
+- **Phase 6** adds an **uncertainty simulation layer**: simulated dwell distributions, p10/p90 uncertainty bands, and 24-hour breach probability under baseline and stressed conditions — most useful near the model's decision boundary; inherits the regression model's limitation on extreme breach cases
+- The final system is a **layered decision-support framework**: regression for planning, risk tiers for situational awareness, a classifier for breach early-warning, and simulation for uncertainty-aware planning
 
 ---
 
@@ -27,10 +28,15 @@ conda env create -f environment.yml
 conda activate rail-ops
 ```
 
-The main synthetic dataset is included at `data/synthetic/phase1_terminal_dwell.csv`
-(8 terminals, 2022-01-01 through 2024-12-31, 8,760 rows). No additional data download is required.
+The main synthetic dataset is generated locally using the included generator script:
 
-Open notebooks in order from `01_data_exploration.ipynb` through `10_breach_detection_model.ipynb`.
+```bash
+python -m src.data.generate_synthetic
+```
+
+This creates `data/synthetic/phase1_terminal_dwell.csv` (8 terminals, 2022-01-01 through 2024-12-31, 8,760 rows). No external data download is required — the dataset is fully synthetic and reproducible from the project code.
+
+Open notebooks in order from `01_data_exploration.ipynb` through `11_uncertainty_simulation.ipynb`.
 Each notebook is self-contained with narrative framing alongside the analysis.
 
 ---
@@ -107,7 +113,7 @@ outbound departure.
 | **Stakeholder explainability** | "Dwell is rising because inbound volume spiked while crew availability dropped" — an SVP acts on that |
 | **Public benchmarkability** | STB-reported weekly by all Class I railroads |
 
-### Future Targets (Phase 6+)
+### Future Prediction Targets (Phase 7+)
 
 | Target | What It Captures | Complement to Dwell |
 |---|---|---|
@@ -190,7 +196,7 @@ tuning, and error analysis results are directly comparable.
 | Naive persistence (lag-1) |        5.250 |       4.068 |
 | LightGBM baseline         |        3.841 |       2.942 |
 
-Improvement vs naive: **RMSE −26.8% / MAE −27.7%**
+Baseline LightGBM improvement vs naive persistence: **RMSE −26.8% / MAE −27.7%**
 
 #### Feature Importance & Interpretation
 
@@ -215,9 +221,9 @@ Most predictive power comes from operational drivers, not memorized yard identit
 | Baseline LightGBM |        3.841 |       2.942 |
 | Tuned LightGBM    |        3.749 |       2.879 |
 
-Improvement vs baseline: **RMSE −2.4% / MAE −2.1%**  
-Gains were modest — the baseline was already strong; some remaining error likely
-reflects irreducible noise in the synthetic congestion process.
+Improvement vs baseline LightGBM: **RMSE −2.4% / MAE −2.1%**  
+Improvement vs naive persistence: **RMSE −28.6%** (5.250h → 3.749h)  
+Gains over the baseline were modest — the baseline was already strong; some remaining error likely reflects irreducible noise in the synthetic congestion process.
 
 #### Error Analysis
 
@@ -276,7 +282,7 @@ The operationally linked stress scenario — which co-perturbs workload, yard-st
 
 The operationally linked stress scenario produced the strongest threshold-breach signal, suggesting that linked multi-variable stress design is more credible and more useful for operational warning than isolated single-feature shocks.
 
-> **Limitation:** Notebook 06 is useful for sensitivity analysis and early-warning experimentation, but the model should not yet be treated as a fully causal operational simulator. More operationally coherent scenario design — with full input linkage — is a goal for the formal Monte Carlo simulation phase.
+> **Limitation:** Notebook 06 is useful for sensitivity analysis and early-warning experimentation, but the model should not yet be treated as a fully causal operational simulator. More operationally coherent scenario design — with full input linkage — is addressed in Phase 6.
 
 **Next recommended step:** Advance to Phase 2 — Temporal Modeling — to capture sequential dwell patterns across rolling time windows that the tabular Phase 1 model does not directly model.
 
@@ -409,16 +415,52 @@ breach-event detection. The result is a **layered decision framework**:
 
 ---
 
+### Phase 6 — Uncertainty Simulation and Scenario Stress Testing ✓ Complete
+
+**Business objective:**  
+Support planning under uncertainty by estimating not just predicted dwell, but also uncertainty bands, threshold breach probability, and response under stressed operating conditions.
+
+**Approach:** The tuned LightGBM regression model is retained as the forecasting engine. A Monte Carlo simulation layer is added on top: key operational inputs are perturbed around observed values using multiplicative noise, producing a distribution of predicted dwell outcomes. Stress scenarios (volume surge, crew shortage, combined stress) shift the input baseline systematically before perturbation.
+
+**Notebook:** `11_uncertainty_simulation.ipynb`
+
+**Main outputs:**
+- Simulated dwell distributions per terminal-day (mean, median, p10/p90)
+- 24-hour breach probability estimates under baseline and stressed conditions
+- Scenario comparison across four defined stress conditions
+- Aggregate breach-probability analysis on a planning-relevant test-set subset (`predicted_dwell ≥ 20h`)
+
+#### Key findings
+
+**Severe-breach limitation:** A row with a severe realized breach (observed dwell well above 24h) remained compressed by the regression model. Simulation-based breach probability stayed near zero across all scenarios. This is not a plotting error — it reflects a known limitation: the simulation layer inherits the regression model's tendency to compress extreme breach cases toward the center of the prediction range. This finding is consistent with the broader Phase 5 result that regression is useful for planning-oriented dwell forecasting but weaker than the dedicated classifier for rare-event breach detection.
+
+**Prediction-near-threshold value:** A case selected near the model's 24-hour decision boundary (predicted dwell ~24.5h, terminal T04, 2024-09-14) showed a baseline breach probability of 0.813. This illustrates where simulation adds practical planning value: near the model's operating threshold, where uncertainty around the 24-hour limit is most decision-relevant. Scenario effects were not perfectly monotonic — consistent with model nonlinearity, local feature interactions, and the use of simple scenario multipliers that do not guarantee directional deterioration in every region of feature space.
+
+**Population-level view:** Applying the simulation layer across test-set rows with predicted dwell ≥ 20h produces a breach-probability distribution that can help identify which forecasted terminal-days merit closer planning attention before committing resources.
+
+#### Honest limitations
+
+Perturbation scales are heuristic first-pass assumptions, not empirically calibrated from historical operational variance. Scenario multipliers are simple and directional — they do not guarantee monotonic deterioration in every operating context. Cost-impact translation is not yet included. Phase 6 is a first uncertainty-aware planning extension, not a fully calibrated operational stress-testing or cost-impact framework.
+
+#### Updated layered framework
+
+| Layer | Tool | Use Case |
+|---|---|---|
+| **Planning** | Tuned LightGBM regression | Next-day dwell magnitude forecasting |
+| **Situational awareness** | Phase 3 risk tiers | Operational risk classification |
+| **Early-warning intervention** | Classifier at threshold 0.40 | Breach-event triggering and alert routing |
+| **Uncertainty planning** | Phase 6 simulation layer | Dwell distributions, breach probability, scenario sensitivity |
+
+---
+
 ### Future Directions
 
-**Monte Carlo Scenario Simulation**
+**Phase 6 Extensions — Calibration and Cost Translation**
 
-Move from point forecasts to probabilistic scenarios that quantify uncertainty:
-- Monte Carlo simulation layer generating dwell distributions under scenarios
-- Scenario library: volume surge, crew shortage, weather event, interchange delay
-- P10 / P50 / P90 confidence intervals per terminal
-- Cost-impact translation layer (separate from the forecasting model) converting
-  dwell distributions to car-hire, crew, and fuel cost estimates with stated assumptions
+Phase 6 completed an initial uncertainty simulation layer. Remaining work to extend it:
+- Empirically calibrate perturbation scales from historical operational variance data
+- Expand scenario library to include weather events and interchange delays
+- Build a cost-impact translation layer (separate from the forecasting model) converting dwell distributions to car-hire, crew, and fuel cost estimates using stated rate assumptions
 
 **Operational Dashboard**
 
@@ -492,7 +534,7 @@ briefing or weekly planning session:
 
 ## Technology Stack
 
-### Core Stack (Phases 1–5)
+### Core Stack (Phases 1–6)
 
 | Layer | Tool | Purpose |
 |---|---|---|
@@ -510,7 +552,7 @@ briefing or weekly planning session:
 | Layer | Tool | Phase | Purpose |
 |---|---|---|---|
 | **ML — Sequence** | TensorFlow / Keras | Phase 2 | Temporal modeling benchmarks (LSTM) |
-| **Simulation** | NumPy / SciPy | Future | Monte Carlo scenario engine |
+| **Simulation** | NumPy / SciPy | Phase 6 ✓ | Uncertainty simulation layer — dwell distributions, breach probability, scenario comparisons |
 | **Dashboard** | Streamlit | Future | Operational decision-support UI |
 | **GPU Acceleration** | RAPIDS / cuDF | As needed | Large-scale data processing |
 | **Environment** | Conda (Anaconda) | All | Dependency management |
@@ -535,7 +577,8 @@ rail-ops-forecaster/
 │   ├── 07_temporal_modeling_lstm.ipynb  # Phase 2 temporal benchmark ✓
 │   ├── 08_decision_support_layer.ipynb  # Phase 3 decision-support layer ✓
 │   ├── 09_multistep_forecasting.ipynb   # Phase 4 multi-step planning ✓
-│   └── 10_breach_detection_model.ipynb  # Phase 5 breach detection ✓
+│   ├── 10_breach_detection_model.ipynb  # Phase 5 breach detection ✓
+│   └── 11_uncertainty_simulation.ipynb  # Phase 6 uncertainty simulation ✓
 │
 ├── src/                        # Production-grade source code
 │   ├── __init__.py
@@ -567,7 +610,7 @@ rail-ops-forecaster/
 │
 ├── data/
 │   ├── synthetic/
-│   │   └── phase1_terminal_dwell.csv   # Main dataset — tracked in repo
+│   │   └── phase1_terminal_dwell.csv   # Main synthetic dataset — generated locally
 │   ├── raw/                            # gitignored
 │   └── processed/                      # gitignored
 │
@@ -591,6 +634,7 @@ rail-ops-forecaster/
 **Phase 3:** ✓ Complete — Decision-support layer with operational risk thresholds (`08_decision_support_layer.ipynb`)  
 **Phase 4:** ✓ Complete — Direct multi-step forecasting at day+1/3/5/7 horizons (`09_multistep_forecasting.ipynb`)  
 **Phase 5:** ✓ Complete — Dedicated breach classifier; ROC-AUC 0.757; recall 79.8% at threshold 0.40 (10–12× improvement over regression-derived flag); layered decision framework established (`10_breach_detection_model.ipynb`)  
-**Completed notebooks:** `01_data_exploration` · `02_baseline_model` · `03_feature_importance` · `04_hyperparameter_tuning` · `05_error_analysis` · `06_scenario_analysis` · `07_temporal_modeling_lstm` · `08_decision_support_layer` · `09_multistep_forecasting` · `10_breach_detection_model`  
-**Next:** Monte Carlo scenario simulation and operational dashboard (see Future Directions)
+**Phase 6:** ✓ Complete — Uncertainty simulation layer; simulated dwell distributions, p10/p90 bands, 24-hour breach probability, scenario comparisons, aggregate population-level analysis (`11_uncertainty_simulation.ipynb`)  
+**Completed notebooks:** `01_data_exploration` · `02_baseline_model` · `03_feature_importance` · `04_hyperparameter_tuning` · `05_error_analysis` · `06_scenario_analysis` · `07_temporal_modeling_lstm` · `08_decision_support_layer` · `09_multistep_forecasting` · `10_breach_detection_model` · `11_uncertainty_simulation`  
+**Next:** Phase 6 calibration extensions, cost-impact translation layer, and operational dashboard (see Future Directions)
 
