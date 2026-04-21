@@ -36,3 +36,6 @@ Thumbs.db
 # Reports (regenerated, not tracked)
 reports/figures/*.png
 reports/figures/*.pdf
+
+# Local tool config
+.claude/
