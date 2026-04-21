@@ -39,3 +39,6 @@ reports/figures/*.pdf
 
 # Local tool config
 .claude/
+
+# Local tool config
+.claude/
