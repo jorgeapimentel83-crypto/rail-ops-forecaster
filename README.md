@@ -15,7 +15,8 @@ operating dynamics for demonstration and modeling purposes.
 - **Phase 4** extended the framework to direct multi-step horizons (day+1 through day+7); RMSE remained flat (~3.73–3.75h) across horizons, with low breach recall motivating Phase 5
 - **Phase 5** dedicated breach classifier achieved **79.8% recall at threshold 0.40** — roughly 10–12× improvement over the regression-derived warning flag (7.0% recall)
 - **Phase 6** adds an **uncertainty simulation layer**: simulated dwell distributions, p10/p90 uncertainty bands, and 24-hour breach probability under baseline and stressed conditions — most useful near the model's decision boundary; inherits the regression model's limitation on extreme breach cases
-- The final system is a **layered decision-support framework**: regression for planning, risk tiers for situational awareness, a classifier for breach early-warning, and simulation for uncertainty-aware planning
+- **Phase 7** adds a **Streamlit dashboard** that turns forecasts, risk tiers, classifier warnings, and plain-English summaries into an interactive decision-support interface
+- The final system is a **layered decision-support framework**: regression for planning, risk tiers for situational awareness, a classifier for breach early-warning, simulation for uncertainty-aware planning, and an interactive dashboard surface for end-user decision support
 
 ---
 
@@ -36,8 +37,25 @@ python -m src.data.generate_synthetic
 
 This creates `data/synthetic/phase1_terminal_dwell.csv` (8 terminals, 2022-01-01 through 2024-12-31, 8,760 rows). No external data download is required — the dataset is fully synthetic and reproducible from the project code.
 
-Open notebooks in order from `01_data_exploration.ipynb` through `11_uncertainty_simulation.ipynb`.
+Open notebooks in order from `01_data_exploration.ipynb` through `12_dashboard_data_prep.ipynb`.
 Each notebook is self-contained with narrative framing alongside the analysis.
+
+### Launching the Dashboard (Phase 7)
+
+The Phase 7 Streamlit dashboard reads a prepared CSV produced by Notebook 12. To run it locally:
+
+```bash
+# 1. Generate the synthetic dataset (if not already done)
+python -m src.data.generate_synthetic
+
+# 2. Run notebooks/12_dashboard_data_prep.ipynb end-to-end
+#    This produces data/processed/dashboard_forecasts.csv
+
+# 3. Launch the dashboard
+streamlit run app/app.py
+```
+
+`data/processed/dashboard_forecasts.csv` is generated locally and is gitignored — it is not tracked in the repository.
 
 ---
 
@@ -113,7 +131,7 @@ outbound departure.
 | **Stakeholder explainability** | "Dwell is rising because inbound volume spiked while crew availability dropped" — an SVP acts on that |
 | **Public benchmarkability** | STB-reported weekly by all Class I railroads |
 
-### Future Prediction Targets (Phase 7+)
+### Future Prediction Targets
 
 | Target | What It Captures | Complement to Dwell |
 |---|---|---|
@@ -453,6 +471,55 @@ Perturbation scales are heuristic first-pass assumptions, not empirically calibr
 
 ---
 
+### Phase 7 — Interactive Decision-Support Dashboard ✓ Complete
+
+**Business objective:**  
+Package the existing modeling outputs — regression forecasts, operational risk tiers, classifier breach warnings, and plain-English summaries — into an interactive interface a non-modeler can navigate. Phase 7 does not produce new modeling findings; it surfaces prior phases through a Streamlit decision-support UI.
+
+**Approach:** A dedicated data-prep notebook rebuilds the tuned LightGBM regression model and the Phase 5 breach classifier, applies the Phase 3 risk tiers, and writes a single dashboard-ready CSV. A Streamlit app reads that CSV and renders the views.
+
+**Notebook:** `12_dashboard_data_prep.ipynb`  
+**App:** `app/app.py`
+
+#### Notebook 12 — Dashboard Data Preparation
+
+The notebook:
+- Loads the synthetic dataset
+- Rebuilds the tuned LightGBM regression model and generates predicted dwell
+- Applies Phase 3 operational risk tiers
+- Rebuilds the Phase 5 breach classifier and adds breach probabilities and warning flags
+- Adds dashboard priority labels and plain-English operating summaries
+- Writes `data/processed/dashboard_forecasts.csv` locally (gitignored)
+
+Reproduced model metrics on the test set:
+
+| Metric | Value |
+|---|---:|
+| Regression RMSE | 3.749 h |
+| Regression MAE | 2.879 h |
+| Classifier ROC-AUC | 0.757 |
+| Classifier Average Precision | 0.351 |
+
+**Dashboard data output:** 1,464 rows × 24 columns — 653 classifier breach warnings against 242 actual breaches on the held-out test window.
+
+These values are consistent with Phases 1, 4, and 5; Phase 7 reuses those results rather than producing new ones.
+
+#### Dashboard App — `app/app.py`
+
+The Streamlit app reads `data/processed/dashboard_forecasts.csv` and presents:
+- Executive summary cards (terminal-day counts, breach warnings, headline metrics)
+- Sidebar filters for terminals, date range, risk tiers, and dashboard priorities
+- Risk tier distribution
+- Dashboard priority distribution
+- Per-terminal actual-vs-predicted dwell trend view
+- Terminal risk table
+- Plain-English operating summaries per terminal-day
+- Project interpretation notes that frame the dashboard as a portfolio demonstration over synthetic data
+
+The dashboard runs locally via `streamlit run app/app.py`. It is not production deployed.
+
+---
+
 ### Future Directions
 
 **Phase 6 Extensions — Calibration and Cost Translation**
@@ -462,14 +529,14 @@ Phase 6 completed an initial uncertainty simulation layer. Remaining work to ext
 - Expand scenario library to include weather events and interchange delays
 - Build a cost-impact translation layer (separate from the forecasting model) converting dwell distributions to car-hire, crew, and fuel cost estimates using stated rate assumptions
 
-**Operational Dashboard**
+**Dashboard Enhancements and Deployment Polish**
 
-Package the system into outputs an operations leader would use in a morning
-briefing or weekly planning session:
-- Streamlit dashboard: per-terminal forecasts with multi-horizon trend views
-- Scenario comparison view with breach probability and cost impact estimates
-- SHAP-based driver attribution breakdown
+Phase 7 delivered a working local Streamlit dashboard. Remaining work to mature it:
+- Multi-horizon trend views (day+1 / +3 / +5 / +7) layered onto the per-terminal display
+- Scenario comparison view with Phase 6 breach probabilities and cost-impact estimates side by side
+- SHAP-based driver attribution panel for the currently selected terminal-day
 - Threshold alert logic with configurable lead-time settings
+- Deployment polish (hosted version, authentication, data refresh pipeline)
 
 **Multi-Target & Network Effects**
 
@@ -553,7 +620,7 @@ briefing or weekly planning session:
 |---|---|---|---|
 | **ML — Sequence** | TensorFlow / Keras | Phase 2 | Temporal modeling benchmarks (LSTM) |
 | **Simulation** | NumPy / SciPy | Phase 6 ✓ | Uncertainty simulation layer — dwell distributions, breach probability, scenario comparisons |
-| **Dashboard** | Streamlit | Future | Operational decision-support UI |
+| **Dashboard** | Streamlit | Phase 7 ✓ | Interactive decision-support UI (`app/app.py`) over the dashboard-ready CSV produced by Notebook 12 |
 | **GPU Acceleration** | RAPIDS / cuDF | As needed | Large-scale data processing |
 | **Environment** | Conda (Anaconda) | All | Dependency management |
 
@@ -578,7 +645,8 @@ rail-ops-forecaster/
 │   ├── 08_decision_support_layer.ipynb  # Phase 3 decision-support layer ✓
 │   ├── 09_multistep_forecasting.ipynb   # Phase 4 multi-step planning ✓
 │   ├── 10_breach_detection_model.ipynb  # Phase 5 breach detection ✓
-│   └── 11_uncertainty_simulation.ipynb  # Phase 6 uncertainty simulation ✓
+│   ├── 11_uncertainty_simulation.ipynb  # Phase 6 uncertainty simulation ✓
+│   └── 12_dashboard_data_prep.ipynb     # Phase 7 dashboard data preparation ✓
 │
 ├── src/                        # Production-grade source code
 │   ├── __init__.py
@@ -601,18 +669,15 @@ rail-ops-forecaster/
 │       ├── metrics.py              # RMSE, MAE, MAPE, business metrics
 │       └── explainability.py       # Feature importance and SHAP analysis
 │
-├── app/                        # Streamlit dashboard (Phase 4)
-│   ├── app.py
-│   └── components/
-│       ├── forecast_view.py
-│       ├── scenario_view.py
-│       └── alert_view.py
+├── app/                        # Streamlit dashboard (Phase 7 ✓)
+│   └── app.py                          # Interactive decision-support UI
 │
 ├── data/
 │   ├── synthetic/
 │   │   └── phase1_terminal_dwell.csv   # Main synthetic dataset — generated locally
 │   ├── raw/                            # gitignored
 │   └── processed/                      # gitignored
+│       └── dashboard_forecasts.csv     # Phase 7 dashboard input — generated locally by Notebook 12
 │
 ├── models/                     # Saved model artifacts (gitignored)
 │
@@ -635,6 +700,7 @@ rail-ops-forecaster/
 **Phase 4:** ✓ Complete — Direct multi-step forecasting at day+1/3/5/7 horizons (`09_multistep_forecasting.ipynb`)  
 **Phase 5:** ✓ Complete — Dedicated breach classifier; ROC-AUC 0.757; recall 79.8% at threshold 0.40 (10–12× improvement over regression-derived flag); layered decision framework established (`10_breach_detection_model.ipynb`)  
 **Phase 6:** ✓ Complete — Uncertainty simulation layer; simulated dwell distributions, p10/p90 bands, 24-hour breach probability, scenario comparisons, aggregate population-level analysis (`11_uncertainty_simulation.ipynb`)  
-**Completed notebooks:** `01_data_exploration` · `02_baseline_model` · `03_feature_importance` · `04_hyperparameter_tuning` · `05_error_analysis` · `06_scenario_analysis` · `07_temporal_modeling_lstm` · `08_decision_support_layer` · `09_multistep_forecasting` · `10_breach_detection_model` · `11_uncertainty_simulation`  
-**Next:** Phase 6 calibration extensions, cost-impact translation layer, and operational dashboard (see Future Directions)
+**Phase 7:** ✓ Complete — Interactive Streamlit decision-support dashboard backed by a dashboard-ready CSV produced by Notebook 12 (`12_dashboard_data_prep.ipynb`, `app/app.py`)  
+**Completed notebooks:** `01_data_exploration` · `02_baseline_model` · `03_feature_importance` · `04_hyperparameter_tuning` · `05_error_analysis` · `06_scenario_analysis` · `07_temporal_modeling_lstm` · `08_decision_support_layer` · `09_multistep_forecasting` · `10_breach_detection_model` · `11_uncertainty_simulation` · `12_dashboard_data_prep`  
+**Next:** Phase 6 calibration extensions, cost-impact translation layer, richer scenario library, dashboard enhancements / deployment polish, and potential RAG/IPA copilot extensions (see Future Directions)
 
